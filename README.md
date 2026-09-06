@@ -34,7 +34,7 @@ Choose where the language model should run. All three configurations use local P
 |---|---|---|
 | [Apple Silicon, fully local](#apple-silicon-fully-local) | Apple Silicon Mac; budget 16 GB or more of unified memory | None |
 | [NVIDIA GPU, fully local](#nvidia-gpu-fully-local) | Linux with an NVIDIA GPU; budget 24 GB of VRAM for all three models with the unquantized LLM below | None |
-| [Local speech with a hosted LLM](#local-speech-with-a-hosted-llm) | Apple Silicon Mac or Linux with an NVIDIA GPU; no local LLM to load | Transcribed text, instructions, and conversation history; microphone audio stays local |
+| [Local speech with a hosted LLM](#local-speech-with-a-hosted-llm) | Apple Silicon: budget ~8 GB of available unified memory (16 GB total recommended); Linux/NVIDIA: ~8 GB of available VRAM, plus system RAM | Transcribed text, instructions, and conversation history; microphone audio stays local |
 
 The memory figures are planning estimates for one conversation, not measured minimum requirements. Actual use depends on context length, audio length, and backend versions. All configurations need internet access for the first model downloads; the hosted LLM also needs an API key and internet access during conversations.
 
@@ -88,6 +88,8 @@ After downloading the required assets, this configuration can also run [offline]
 ### Local speech with a hosted LLM
 
 Use this to keep speech recognition and synthesis on your computer while a hosted model generates the reply. It works on Apple Silicon or the Linux/CUDA setup above and avoids loading the local LLM. On Apple Silicon, the speech backends select MLX automatically.
+
+Budget approximately **8 GB of available memory for the local speech pipeline**. On Apple Silicon, this comes from unified memory; **16 GB total is recommended** to leave room for macOS and other apps. On Linux/NVIDIA, budget **8 GB of available GPU VRAM**, with separate system RAM for model loading, the operating system, and other apps. These are planning estimates for one conversation, not verified minimums; the model download sizes below are disk requirements, not runtime memory measurements.
 
 ```bash
 export OPENAI_API_KEY=...
