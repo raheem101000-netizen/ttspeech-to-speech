@@ -28,12 +28,14 @@ This pipeline runs in production as the conversation backend for thousands of [R
 
 ## Quickstart
 
-Choose where the language model should run. All three configurations use local Parakeet TDT speech recognition and Qwen3-TTS speech output, and start the packaged microphone/speaker client so you can talk from one terminal.
+Choose where the language model should run. All three configurations use local Parakeet TDT speech recognition and Qwen3-TTS speech output, and include the packaged microphone/speaker client. The Mac and hosted LLM routes use one terminal; the llama.cpp route uses two.
+
+Following the [Reachy Mini local conversation guide](https://huggingface.co/blog/local-reachy-mini-conversation), start with the default speech components and choose an LLM that fits your hardware: Silero detects speech boundaries, Parakeet transcribes your words, and Qwen3-TTS speaks the reply. MLX is the simplest Mac starting point; a separate llama.cpp server lets you tune or replace the local LLM independently of the speech pipeline. Both approaches keep the conversation local.
 
 | Starting configuration | Hardware to plan for | Conversation data sent to a provider |
 |---|---|---|
 | [Apple Silicon, fully local](#apple-silicon-fully-local) | Apple Silicon Mac; budget 16 GB or more of unified memory | None |
-| [NVIDIA GPU, fully local](#nvidia-gpu-fully-local) | Linux with an NVIDIA GPU; budget 24 GB of VRAM for all three models with the unquantized LLM below | None |
+| [NVIDIA GPU, fully local](#nvidia-gpu-fully-local) | Linux with an NVIDIA GPU; budget 16 GB of VRAM for the quantized Gemma 4 LLM, speech models, and caches below, plus system RAM | None |
 | [Local speech with a hosted LLM](#local-speech-with-a-hosted-llm) | Apple Silicon: budget ~8 GB of available unified memory (16 GB total recommended); Linux/NVIDIA: ~8 GB of available VRAM, plus system RAM | Transcribed text, instructions, and conversation history; microphone audio stays local |
 
 The memory figures are planning estimates for one conversation, not measured minimum requirements. Actual use depends on context length, audio length, and backend versions. All configurations need internet access for the first model downloads; the hosted LLM also needs an API key and internet access during conversations.
@@ -54,7 +56,7 @@ Run the configuration you chose from this directory. The first run downloads and
 
 ### Apple Silicon, fully local
 
-Use this on an Apple Silicon Mac to run speech recognition, the language model, and speech synthesis on your own machine. No API key is needed.
+Use this on an Apple Silicon Mac to run speech recognition, the language model, and speech synthesis on your own machine. Start here for a single-command setup with a small, quantized LLM. No API key is needed.
 
 ```bash
 uv run speech-to-speech local \
@@ -64,26 +66,44 @@ uv run speech-to-speech local \
 
 The Mac preset selects Parakeet TDT through MLX, the 4-bit Qwen3-4B language model through MLX LM, and the 6-bit Qwen3-TTS CustomVoice model through MLX Audio. The core model weights total approximately **7.5 GB**: [STT](https://huggingface.co/mlx-community/parakeet-tdt-0.6b-v3/tree/main), [LLM](https://huggingface.co/mlx-community/Qwen3-4B-Instruct-2507-4bit/tree/main), and [TTS](https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-6bit/tree/main). Allow additional disk space for dependencies and auxiliary model assets.
 
-After the exact configuration has run once online, follow [Offline operation](#offline-operation) to run without internet access. For a local model that accepts audio directly, see the [Gemma 4 12B example](./examples/gemma4-12b-macos/README.md).
+After the exact configuration has run once online, follow [Offline operation](#offline-operation) to run without internet access. To use Gemma 4 through a separate llama.cpp server on your Mac, follow the [local LLM guidance](#fully-local). For a local model that accepts audio directly, see the [Gemma 4 12B example](./examples/gemma4-12b-macos/README.md).
 
 ### NVIDIA GPU, fully local
 
-Use this on a Linux workstation with a CUDA-capable NVIDIA GPU. All three models run on the same GPU, with the language model loaded directly through Transformers. No separate LLM server or API key is needed.
+Use this on a Linux workstation with a CUDA-capable NVIDIA GPU. Run a quantized Gemma 4 E4B model in llama.cpp and connect the speech pipeline to its local Responses API. No provider API key is needed. Install a current [llama.cpp CUDA build](https://github.com/ggml-org/llama.cpp/blob/master/docs/build.md#cuda) and make `llama-server` available on your PATH.
+
+In terminal 1, start the LLM server:
+
+```bash
+llama-server \
+    -hf ggml-org/gemma-4-E4B-it-GGUF:Q4_0 \
+    --alias local-gemma \
+    --host 127.0.0.1 --port 8080 \
+    -ngl all -np 1 -c 8192 -fa on \
+    --no-mmproj \
+    --reasoning off
+```
+
+This explicitly selects the [4-bit weights, approximately **4.6 GB**](https://huggingface.co/ggml-org/gemma-4-E4B-it-GGUF/blob/main/gemma-4-E4B-it-Q4_0.gguf), with one request slot and an 8k context. `--no-mmproj` skips the image/audio projector because Parakeet supplies text. Wait for the server to finish loading, then leave it running.
+
+In terminal 2, from your speech-to-speech checkout, start the speech pipeline and microphone client:
 
 ```bash
 uv run speech-to-speech local \
     --device cuda \
     --stt parakeet-tdt \
-    --llm_backend transformers \
-    --model_name Qwen/Qwen3-4B-Instruct-2507 \
-    --llm_torch_dtype float16 \
+    --llm_backend responses-api \
+    --model_name local-gemma \
+    --responses_api_base_url http://127.0.0.1:8080/v1 \
+    --responses_api_api_key "" \
+    --responses_api_reasoning_effort none \
     --tts qwen3 \
     --qwen3_tts_backend ggml
 ```
 
-This uses Parakeet TDT through nano-parakeet and Qwen3-TTS CustomVoice through GGML. The [LLM weights alone are approximately **8 GB**](https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/tree/main); speech models, GGUF caches, and dependencies require additional disk space. If GPU memory is tight, use the hosted LLM configuration below or serve a quantized LLM with [llama.cpp](#fully-local).
+The two processes share the GPU: leave approximately **8 GB of available VRAM for the speech pipeline**, in addition to the LLM's weights and runtime cache. Parakeet uses nano-parakeet and Qwen3-TTS CustomVoice uses GGML. Speech model downloads, GGUF caches, and dependencies require additional disk space. The local URL and matching `local-gemma` model alias route replies to your own server; using the Responses API does not imply a cloud service.
 
-After downloading the required assets, this configuration can also run [offline](#offline-operation). For a server running in containers, see [Docker](#docker).
+If memory is tight, reduce the LLM context or use the hosted LLM route below. For tuning and an in-process Transformers alternative, see [Fully Local](#fully-local). After downloading the required assets, this configuration can also run [offline](#offline-operation). Stop both processes with `Ctrl+C` in their respective terminals. For a server running in containers, see [Docker](#docker).
 
 ### Local speech with a hosted LLM
 
@@ -105,7 +125,7 @@ This uses the default OpenAI model described under [Realtime Server](#realtime-s
 
 Start in English. The Parakeet/Qwen3-TTS pairing also covers French, German, Italian, Portuguese, Russian, and Spanish; use `--language auto` for language switching. For languages outside this overlap, choose an STT/TTS pairing from [Multi-language support](#multi-language-support).
 
-To connect an app instead of the packaged microphone client, replace `local` with `serve` in your chosen command. The server listens at `ws://127.0.0.1:8765/v1/realtime`. You can then connect from a second terminal in the checkout:
+To connect an app instead of the packaged microphone client, replace `local` with `serve` in your chosen speech-to-speech command, keeping any separate LLM server running. The speech server listens at `ws://127.0.0.1:8765/v1/realtime`. You can then connect from another terminal in the checkout:
 
 ```bash
 uv run speech-to-speech talk --url ws://127.0.0.1:8765/v1/realtime
@@ -517,29 +537,31 @@ speech-to-speech serve \
 
 ### Fully Local
 
-Run the LLM in a separate llama.cpp process for the lowest-friction fully local setup, as shown in the [Reachy Mini local conversation guide](https://huggingface.co/blog/local-reachy-mini-conversation):
+Choose the [MLX quickstart](#apple-silicon-fully-local) for a single-command Mac setup, or the [llama.cpp/Gemma 4 quickstart](#nvidia-gpu-fully-local) to serve and tune the LLM separately, following the approach in the [Reachy Mini guide](https://huggingface.co/blog/local-reachy-mini-conversation).
+
+**llama.cpp on Apple Silicon:** install it with `brew install llama.cpp`, then use the same two-terminal Gemma 4 recipe, omitting `--device cuda` from the speech-to-speech command. The speech backends select MLX automatically. Budget **24 GB of total unified memory** for this larger local combination and system headroom; this is a planning estimate, separate from the 16 GB estimate for the smaller Qwen3-4B MLX recipe.
+
+Tune one setting at a time while checking how long it takes to hear the first reply:
+
+- **Start with a small, quantized LLM.** Fit speech models and runtime caches alongside it before moving to a larger model. The recipes pin their quantization so a different default download does not change the memory budget.
+- **Keep reasoning off for conversation.** The llama.cpp recipe uses `--reasoning off`; the pipeline streams replies and requests reasoning effort `none`. Enable thinking only when the task needs the extra reasoning time.
+- **Start with one slot and an 8k context.** Increase `-c` for longer conversations and `-np` for concurrent requests only when needed; size the context for all slots and leave memory for speech. The blog's `-np 2 -c 65536` is an option for machines with more headroom.
+- **Tune attention after the baseline works.** `-fa on` enables Flash Attention. Try `--swa-full` for Gemma prompt processing when memory permits; it allocates a larger sliding-window cache. See the [llama.cpp server reference](https://github.com/ggml-org/llama.cpp/tree/master/tools/server) for these controls.
+
+**Transformers alternative on NVIDIA:** use this if you want to load a Hugging Face model directly in the speech process. It needs no separate LLM server. Budget **24 GB of VRAM** for this unquantized LLM, the speech models, and runtime headroom; the [LLM weights alone are approximately 8 GB](https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/tree/main).
+
+```bash
+uv run speech-to-speech local \
+    --device cuda \
+    --stt parakeet-tdt \
+    --llm_backend transformers \
+    --model_name Qwen/Qwen3-4B-Instruct-2507 \
+    --llm_torch_dtype float16 \
+    --tts qwen3 \
+    --qwen3_tts_backend ggml
+```
 
 For a fully local native-audio setup with the browser demo, Realtime turn revisions, and barge-in, see the tested [Gemma 4 12B speech-to-speech example for Apple Silicon](./examples/gemma4-12b-macos/README.md).
-
-```bash
-# Terminal 1: llama.cpp serving Gemma 4
-llama-server -hf ggml-org/gemma-4-E4B-it-GGUF -np 2 -c 65536 -fa on --swa-full
-```
-
-```bash
-# Terminal 2: speech-to-speech using that local LLM server
-speech-to-speech serve \
-    --stt parakeet-tdt \
-    --llm_backend responses-api \
-    --tts qwen3 \
-    --model_name "ggml-org/gemma-4-E4B-it-GGUF" \
-    --responses_api_base_url "http://127.0.0.1:8080/v1" \
-    --responses_api_api_key "" \
-    --responses_api_stream \
-    --enable_live_transcription
-```
-
-Use `speech-to-speech local` when you want to run the same server and talk through the machine hosting it. In-process local backends are available with `--llm_backend mlx-lm` on Apple Silicon or `--llm_backend transformers` on CUDA / CPU.
 
 ## Offline Operation
 
@@ -552,8 +574,8 @@ For the lowest-friction fully local LLM setup, run llama.cpp on the same machine
 `HF_HUB_OFFLINE=1` when starting speech-to-speech to prevent Hugging Face Hub requests:
 
 ```bash
-HF_HUB_OFFLINE=1 speech-to-speech serve \
-    --model_name "ggml-org/gemma-4-E4B-it-GGUF" \
+HF_HUB_OFFLINE=1 uv run speech-to-speech serve \
+    --model_name local-gemma \
     --responses_api_base_url "http://127.0.0.1:8080/v1" \
     --responses_api_api_key ""
 ```
