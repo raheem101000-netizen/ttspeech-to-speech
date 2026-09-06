@@ -42,24 +42,24 @@ The memory figures are planning estimates for one conversation, not measured min
 
 ### Install for these examples
 
-Install [Git](https://git-scm.com/downloads) and [uv](https://docs.astral.sh/uv/getting-started/installation/), then use a source checkout. These examples use the current `serve`, `talk`, and `local` commands; PyPI 0.2.12 uses the earlier interface documented in its [release README](https://github.com/huggingface/speech-to-speech/blob/v0.2.12/README.md).
+Use Python 3.10+ (Python 3.11 recommended) and install the package in a virtual environment.
 
 On Ubuntu, install the local audio libraries first: `sudo apt-get install libportaudio2 libsndfile1`. The default Linux Qwen3-TTS wheel targets CUDA 12.8 and glibc 2.39 (Ubuntu 24.04); check the [CUDA installation note](#cuda-note-for-qwen3-tts) if your system differs.
 
 ```bash
-git clone https://github.com/huggingface/speech-to-speech.git
-cd speech-to-speech
-uv sync --python 3.11
+python3 -m venv .venv
+source .venv/bin/activate
+pip install speech-to-speech
 ```
 
-Run the configuration you chose from this directory. The first run downloads and warms up the models before connecting the microphone. Allow microphone access if prompted, use headphones to avoid speaker feedback, then speak and pause for a reply. Stop with `Ctrl+C`.
+Run the configuration you chose with this environment activated. Activate the same environment in any additional terminal where you run `speech-to-speech`. The first run downloads and warms up the models before connecting the microphone. Allow microphone access if prompted, use headphones to avoid speaker feedback, then speak and pause for a reply. Stop with `Ctrl+C`.
 
 ### Apple Silicon, fully local
 
 Use this on an Apple Silicon Mac to run speech recognition, the language model, and speech synthesis on your own machine. Start here for a single-command setup with a small, quantized LLM. No API key is needed.
 
 ```bash
-uv run speech-to-speech local \
+speech-to-speech local \
     --mac-optimal-settings \
     --model_name mlx-community/Qwen3-4B-Instruct-2507-4bit
 ```
@@ -86,10 +86,10 @@ llama-server \
 
 This explicitly selects the [4-bit weights, approximately **4.6 GB**](https://huggingface.co/ggml-org/gemma-4-E4B-it-GGUF/blob/main/gemma-4-E4B-it-Q4_0.gguf), with one request slot and an 8k context. `--no-mmproj` skips the image/audio projector because Parakeet supplies text. Wait for the server to finish loading, then leave it running.
 
-In terminal 2, from your speech-to-speech checkout, start the speech pipeline and microphone client:
+In terminal 2, activate the same Python environment and start the speech pipeline and microphone client:
 
 ```bash
-uv run speech-to-speech local \
+speech-to-speech local \
     --device cuda \
     --stt parakeet-tdt \
     --llm_backend responses-api \
@@ -113,7 +113,7 @@ Budget approximately **8 GB of available memory for the local speech pipeline**.
 
 ```bash
 export OPENAI_API_KEY=...
-uv run speech-to-speech local \
+speech-to-speech local \
     --stt parakeet-tdt \
     --llm_backend responses-api \
     --tts qwen3
@@ -125,10 +125,10 @@ This uses the default OpenAI model described under [Realtime Server](#realtime-s
 
 Start in English. The Parakeet/Qwen3-TTS pairing also covers French, German, Italian, Portuguese, Russian, and Spanish; use `--language auto` for language switching. For languages outside this overlap, choose an STT/TTS pairing from [Multi-language support](#multi-language-support).
 
-To connect an app instead of the packaged microphone client, replace `local` with `serve` in your chosen speech-to-speech command, keeping any separate LLM server running. The speech server listens at `ws://127.0.0.1:8765/v1/realtime`. You can then connect from another terminal in the checkout:
+To connect an app instead of the packaged microphone client, replace `local` with `serve` in your chosen speech-to-speech command, keeping any separate LLM server running. The speech server listens at `ws://127.0.0.1:8765/v1/realtime`. You can then connect from another terminal with the same Python environment activated:
 
 ```bash
-uv run speech-to-speech talk --url ws://127.0.0.1:8765/v1/realtime
+speech-to-speech talk --url ws://127.0.0.1:8765/v1/realtime
 ```
 
 For a browser interface, start your chosen configuration with `serve`, then follow the [browser demo setup](./demo/README.md#quick-start-local) using that running backend.
@@ -166,13 +166,11 @@ Every stage has multiple interchangeable backends, selected via CLI flags. The c
 
 ## Installation
 
-Requires Python 3.10+. The [quickstart](#quickstart) uses a source checkout with Python 3.11. To install a published release instead:
+Requires Python 3.10+. Install from PyPI in an activated virtual environment (see the [quickstart setup](#install-for-these-examples)):
 
 ```bash
 pip install speech-to-speech
 ```
-
-Use the README for your installed [release](https://github.com/huggingface/speech-to-speech/releases) when following release-specific commands. The source examples in this README use `uv run`; prefix later CLI examples with `uv run` as well when running from the checkout.
 
 The default install covers the standard realtime path:
 
@@ -226,7 +224,16 @@ Deprecated implementations, including MeloTTS, live in [`archive/`](./archive) a
 
 ### From Source
 
-Follow [Install for these examples](#install-for-these-examples) to clone the repository and run `uv sync --python 3.11`. This installs the package in editable mode and makes the CLI available through `uv run speech-to-speech`.
+To work on the code, install [Git](https://git-scm.com/downloads) and [uv](https://docs.astral.sh/uv/getting-started/installation/), then run:
+
+```bash
+git clone https://github.com/huggingface/speech-to-speech.git
+cd speech-to-speech
+uv sync --python 3.11
+source .venv/bin/activate
+```
+
+This installs the package in editable mode. With the environment activated, use the same `speech-to-speech` commands shown above.
 
 ## Supported Components
 
@@ -551,7 +558,7 @@ Tune one setting at a time while checking how long it takes to hear the first re
 **Transformers alternative on NVIDIA:** use this if you want to load a Hugging Face model directly in the speech process. It needs no separate LLM server. Budget **24 GB of VRAM** for this unquantized LLM, the speech models, and runtime headroom; the [LLM weights alone are approximately 8 GB](https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/tree/main).
 
 ```bash
-uv run speech-to-speech local \
+speech-to-speech local \
     --device cuda \
     --stt parakeet-tdt \
     --llm_backend transformers \
@@ -574,7 +581,7 @@ For the lowest-friction fully local LLM setup, run llama.cpp on the same machine
 `HF_HUB_OFFLINE=1` when starting speech-to-speech to prevent Hugging Face Hub requests:
 
 ```bash
-HF_HUB_OFFLINE=1 uv run speech-to-speech serve \
+HF_HUB_OFFLINE=1 speech-to-speech serve \
     --model_name local-gemma \
     --responses_api_base_url "http://127.0.0.1:8080/v1" \
     --responses_api_api_key ""
