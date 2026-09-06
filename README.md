@@ -99,11 +99,9 @@ speech-to-speech local \
 
 This uses the default OpenAI model described under [Realtime Server](#realtime-server), with provider API charges. Only the speech models download locally: approximately **5.2 GB** of core weights on Apple Silicon, plus dependencies and auxiliary assets; Linux uses different speech-model formats and caches. Transcribed text, instructions, and conversation history are sent to OpenAI. Microphone audio and speech synthesis remain on your computer in this configuration. For another provider, see [LLM backends](#llm-backends).
 
-### Languages and other clients
+### Other clients and offline use
 
 For offline use, first cache the selected models and dependencies as described in [Offline operation](#offline-operation).
-
-Start in English. The Parakeet/Qwen3-TTS pairing also covers French, German, Italian, Portuguese, Russian, and Spanish; use `--language auto` for language switching. For languages outside this overlap, choose an STT/TTS pairing from [Multi-language support](#multi-language-support).
 
 To connect an app instead of the packaged microphone client, replace `local` with `serve` in your chosen speech-to-speech command, keeping any separate LLM server running. The speech server listens at `ws://127.0.0.1:8765/v1/realtime`. You can then connect from another terminal with the same Python environment activated:
 
