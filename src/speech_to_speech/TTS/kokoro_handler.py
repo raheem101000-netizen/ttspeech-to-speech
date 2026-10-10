@@ -22,7 +22,7 @@ from rich.console import Console
 from speech_to_speech.baseHandler import BaseHandler
 from speech_to_speech.pipeline.cancel_scope import CancelScope
 from speech_to_speech.pipeline.handler_types import TTSIn, TTSOut
-from speech_to_speech.pipeline.messages import AUDIO_RESPONSE_DONE, EndOfResponse
+from speech_to_speech.pipeline.messages import AUDIO_RESPONSE_DONE, EndOfResponse, TTSInput
 from speech_to_speech.pipeline.speculative_turns import SpeculativeTurnTracker
 from speech_to_speech.utils.mlx_lock import MLXLockContext
 from speech_to_speech.utils.utils import resolve_device
@@ -289,7 +289,7 @@ class KokoroTTSHandler(BaseHandler[TTSIn, TTSOut]):
         else:
             yield from self._process_kokoro(text, language_code, pinned_voice=voice, tts_input=tts_input)
 
-    def _record_tts_ttfa(self, tts_input: TTSIn | None, started_at_s: float, first_audio_at_s: float) -> None:
+    def _record_tts_ttfa(self, tts_input: TTSInput | None, started_at_s: float, first_audio_at_s: float) -> None:
         if tts_input is None:
             return
         store = getattr(self, "turn_latency_store", None)
@@ -297,7 +297,7 @@ class KokoroTTSHandler(BaseHandler[TTSIn, TTSOut]):
         if tracker is not None:
             tracker.record_tts_ttfa(first_audio_at_s - started_at_s)
 
-    def _record_e2e(self, tts_input: TTSIn | None) -> None:
+    def _record_e2e(self, tts_input: TTSInput | None) -> None:
         if tts_input is None or tts_input.speech_stopped_at_s is None:
             return
         latency_s = max(0.0, perf_counter() - tts_input.speech_stopped_at_s)
@@ -329,7 +329,7 @@ class KokoroTTSHandler(BaseHandler[TTSIn, TTSOut]):
         language_code: Optional[str] = None,
         *,
         pinned_voice: Optional[str] = None,
-        tts_input: TTSIn | None = None,
+        tts_input: TTSInput | None = None,
     ) -> Iterator[np.ndarray]:
         """Process using MLX backend with Apple Silicon optimizations."""
         from scipy.signal import resample_poly
@@ -421,7 +421,7 @@ class KokoroTTSHandler(BaseHandler[TTSIn, TTSOut]):
         language_code: Optional[str] = None,
         *,
         pinned_voice: Optional[str] = None,
-        tts_input: TTSIn | None = None,
+        tts_input: TTSInput | None = None,
     ) -> Iterator[np.ndarray]:
         """Process using native kokoro library."""
         from scipy.signal import resample_poly
